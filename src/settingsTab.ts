@@ -3,7 +3,7 @@
  * Settings UI for API key, favorites, and plugin assignments
  */
 
-import { App, PluginSettingTab, Setting, Notice } from "obsidian";
+import { App, PluginSettingTab, Setting, Notice, setIcon } from "obsidian";
 import OpenRouterProvider from "./main";
 
 export class OpenRouterSettingTab extends PluginSettingTab {
@@ -17,9 +17,12 @@ export class OpenRouterSettingTab extends PluginSettingTab {
     display(): void {
         const { containerEl } = this;
         containerEl.empty();
+        containerEl.addClass('or-settings');
 
-        containerEl.createEl('h2', { text: '🌐 OpenRouter Provider Settings' });
+        // ===== HEADER =====
+        containerEl.createEl('h2', { text: 'OpenRouter Provider' });
 
+        // ===== API KEY =====
         new Setting(containerEl)
             .setName('API Key')
             .setDesc('Your OpenRouter API key (shared across all AI plugins)')
@@ -31,89 +34,148 @@ export class OpenRouterSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        const balanceEl = containerEl.createDiv({ attr: { style: 'margin-bottom: 16px; color: var(--text-success);' } });
-        balanceEl.setText("Checking balance...");
+        // Balance display
+        const balanceContainer = containerEl.createDiv({ cls: 'or-settings-balance' });
+        balanceContainer.setText("Checking balance...");
         this.plugin.fetchCredits().then(c => {
-            balanceEl.setText(c ? `💳 Balance: $${c}` : "💳 Balance: Unknown");
+            balanceContainer.empty();
+            const icon = balanceContainer.createSpan({ cls: 'or-balance-icon' });
+            setIcon(icon, 'wallet');
+            balanceContainer.createSpan({ text: c ? `Balance: $${c}` : "Balance: Unknown" });
         });
 
-        containerEl.createEl('h3', { text: '⭐ Favorite Models' });
+        // ===== CONNECTED PLUGINS =====
+        this.createSection(containerEl, 'Connected Plugins', 'plug', () => {
+            const content = containerEl.createDiv({ cls: 'or-settings-section-content' });
 
-        const favList = containerEl.createDiv({ attr: { style: 'margin-bottom: 16px;' } });
-        const currentFavorites = this.plugin.getFavorites();
-        if (currentFavorites.length === 0) {
-            favList.createDiv({ text: 'No favorites saved yet.', attr: { style: 'color: var(--text-muted); font-style: italic;' } });
-        } else {
-            currentFavorites.forEach(m => {
-                const parts = m.split('/');
-                const provider = parts.length > 1 ? parts[0] : '';
-                const modelName = parts.length > 1 ? parts.slice(1).join('/') : m;
+            const aiPlugins = [
+                { id: 'ai-ocr-formatter', name: 'AI OCR Formatter' },
+                { id: 'ai-flashcards', name: 'AI Flashcards' },
+                { id: 'lecture-slides', name: 'Lecture Slides' }
+            ];
 
-                const row = favList.createDiv({ cls: 'openrouter-list-row' });
-                row.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; margin-bottom: 4px; background: var(--background-secondary); border-radius: 4px; gap: 12px;';
+            const pluginModels = this.plugin.settings.pluginModels || {};
+            let hasAnyPlugin = false;
 
-                const nameEl = row.createEl('span');
-                nameEl.textContent = modelName;
-                nameEl.style.cssText = 'font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis;';
+            aiPlugins.forEach(({ id, name }) => {
+                const pluginInstance = (this.app as any).plugins.getPlugin(id);
+                if (!pluginInstance) return;
+                hasAnyPlugin = true;
 
-                if (provider) {
-                    const providerEl = row.createEl('span');
-                    providerEl.textContent = provider;
-                    providerEl.style.cssText = 'color: var(--text-muted); font-size: 0.8em; flex-shrink: 0;';
+                const row = content.createDiv({ cls: 'or-settings-plugin-row' });
+
+                const left = row.createDiv({ cls: 'or-settings-plugin-info' });
+                const statusIcon = left.createSpan({ cls: 'or-status-icon connected' });
+                setIcon(statusIcon, 'check-circle');
+                left.createSpan({ text: name, cls: 'or-settings-plugin-name' });
+
+                const right = row.createDiv({ cls: 'or-settings-plugin-model' });
+                const modelId = pluginModels[id];
+                if (modelId) {
+                    right.createSpan({ text: modelId.split('/').pop() || modelId });
+                } else {
+                    right.createSpan({ text: 'No model set', cls: 'or-text-muted' });
                 }
             });
-        }
 
-        new Setting(containerEl)
-            .addButton(b => b
-                .setButtonText("Manage Models")
-                .onClick(() => {
-                    this.plugin.openModelSelector('settings', () => {
-                        this.display(); // Refresh
-                    });
-                }));
-
-        containerEl.createEl('h3', { text: '🔌 Plugin Model Assignments' });
-
-        const assignments = containerEl.createDiv({ attr: { style: 'margin-bottom: 16px;' } });
-        const pluginModels = this.plugin.settings.pluginModels || {};
-        // Filter out 'settings' since that's not a real plugin
-        const pluginEntries = Object.entries(pluginModels).filter(([id]) => id !== 'settings');
-
-        if (pluginEntries.length === 0) {
-            assignments.createDiv({ text: 'No plugins have selected a model yet.', attr: { style: 'color: var(--text-muted); font-style: italic;' } });
-        } else {
-            pluginEntries.forEach(([pluginId, modelId]) => {
-                const modelName = modelId.split('/').pop();
-
-                const row = assignments.createDiv({ cls: 'openrouter-list-row' });
-                row.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; margin-bottom: 4px; background: var(--background-secondary); border-radius: 4px; gap: 12px;';
-
-                const pluginEl = row.createEl('span');
-                pluginEl.textContent = pluginId;
-                pluginEl.style.cssText = 'font-weight: bold; flex: 1;';
-
-                const modelEl = row.createEl('span');
-                modelEl.textContent = modelName || modelId;
-                modelEl.style.cssText = 'color: var(--text-accent); flex-shrink: 0;';
-            });
-        }
-
-        // Debug section - show all connected AI plugins
-        containerEl.createEl('h3', { text: '🔧 Debug Info' });
-        const debugDiv = containerEl.createDiv({ attr: { style: 'padding: 8px; background: var(--background-secondary); border-radius: 4px; font-family: monospace; font-size: 0.8em;' } });
-
-        // Show raw pluginModels
-        debugDiv.createDiv({ text: `Raw pluginModels:` });
-        debugDiv.createDiv({ text: JSON.stringify(pluginModels, null, 2), attr: { style: 'white-space: pre; margin-left: 12px; color: var(--text-muted);' } });
-
-        // Show connected plugins
-        const aiPlugins = ['ai-ocr-formatter', 'ai-flashcards'];
-        debugDiv.createDiv({ text: `Checking AI plugins:`, attr: { style: 'margin-top: 8px;' } });
-        aiPlugins.forEach(pid => {
-            const plugin = (this.app as any).plugins.getPlugin(pid);
-            const status = plugin ? '✅ Loaded' : '❌ Not loaded';
-            debugDiv.createDiv({ text: `  ${pid}: ${status}`, attr: { style: 'margin-left: 12px;' } });
+            if (!hasAnyPlugin) {
+                content.createDiv({
+                    text: 'No AI plugins detected',
+                    cls: 'or-text-muted or-text-center'
+                });
+            }
         });
+
+        // ===== FAVORITE MODELS =====
+        this.createSection(containerEl, 'Favorite Models', 'star', () => {
+            const content = containerEl.createDiv({ cls: 'or-settings-section-content' });
+
+            const currentFavorites = this.plugin.getFavorites();
+            if (currentFavorites.length === 0) {
+                content.createDiv({
+                    text: 'No favorites saved yet. Use "Manage Models" to add some.',
+                    cls: 'or-text-muted or-text-center'
+                });
+            } else {
+                currentFavorites.forEach(m => {
+                    const parts = m.split('/');
+                    const provider = parts.length > 1 ? parts[0] : '';
+                    const modelName = parts.length > 1 ? parts.slice(1).join('/') : m;
+
+                    const row = content.createDiv({ cls: 'or-settings-model-row' });
+                    row.createSpan({ text: modelName, cls: 'or-settings-model-name' });
+                    if (provider) {
+                        row.createSpan({ text: provider, cls: 'or-settings-model-provider' });
+                    }
+                });
+            }
+
+            // Manage button
+            const btnContainer = content.createDiv({ cls: 'or-settings-btn-container' });
+            const manageBtn = btnContainer.createEl('button', {
+                text: 'Manage Models',
+                cls: 'mod-cta'
+            });
+            manageBtn.addEventListener('click', () => {
+                this.plugin.openModelSelector('settings', () => {
+                    this.display(); // Refresh
+                });
+            });
+        });
+
+        // ===== DEBUG (Collapsible) =====
+        this.createCollapsibleSection(containerEl, 'Debug Info', 'bug', false, () => {
+            const content = containerEl.createDiv({ cls: 'or-settings-debug' });
+
+            const pluginModels = this.plugin.settings.pluginModels || {};
+
+            content.createDiv({ text: 'Raw pluginModels:', cls: 'or-debug-label' });
+            content.createEl('pre', {
+                text: JSON.stringify(pluginModels, null, 2),
+                cls: 'or-debug-json'
+            });
+
+            content.createDiv({ text: 'Favorites array:', cls: 'or-debug-label' });
+            content.createEl('pre', {
+                text: JSON.stringify(this.plugin.settings.favoriteModels, null, 2),
+                cls: 'or-debug-json'
+            });
+        });
+    }
+
+    private createSection(container: HTMLElement, title: string, icon: string, buildContent: () => void): void {
+        const section = container.createDiv({ cls: 'or-settings-section' });
+        const header = section.createDiv({ cls: 'or-settings-section-header' });
+        const iconEl = header.createSpan({ cls: 'or-settings-section-icon' });
+        setIcon(iconEl, icon);
+        header.createSpan({ text: title });
+        buildContent();
+    }
+
+    private createCollapsibleSection(container: HTMLElement, title: string, icon: string, openByDefault: boolean, buildContent: () => void): void {
+        const section = container.createDiv({ cls: 'or-settings-section or-collapsible' });
+        if (openByDefault) section.addClass('open');
+
+        const header = section.createDiv({ cls: 'or-settings-section-header clickable' });
+        const iconEl = header.createSpan({ cls: 'or-settings-section-icon' });
+        setIcon(iconEl, icon);
+        header.createSpan({ text: title });
+        const chevron = header.createSpan({ cls: 'or-chevron' });
+        setIcon(chevron, 'chevron-down');
+
+        const contentWrapper = section.createDiv({ cls: 'or-collapsible-content' });
+
+        header.addEventListener('click', () => {
+            section.toggleClass('open', !section.hasClass('open'));
+        });
+
+        // Build content inside wrapper
+        const originalParent = container;
+        buildContent();
+        // Move the created content div into wrapper
+        const lastChild = container.lastElementChild;
+        if (lastChild && lastChild !== section) {
+            contentWrapper.appendChild(lastChild);
+        }
     }
 }
