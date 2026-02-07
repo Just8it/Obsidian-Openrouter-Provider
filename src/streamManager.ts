@@ -8,7 +8,8 @@ export class StreamManager {
         onToken: (token: string) => void,
         onError: (error: any) => void,
         onComplete: (fullText: string) => void,
-        abortController: AbortController = new AbortController()
+        abortController: AbortController = new AbortController(),
+        onReasoning?: (reasoning: string) => void
     ): Promise<void> {
 
         try {
@@ -62,23 +63,22 @@ export class StreamManager {
                             const data = JSON.parse(trimmed.slice(6));
 
                             // Handle content delta
-                            const delta = data.choices?.[0]?.delta?.content;
+                            const delta = data.choices?.[0]?.delta;
                             if (delta) {
-                                fullText += delta;
-                                onToken(delta);
+                                if (delta.content) {
+                                    fullText += delta.content;
+                                    onToken(delta.content);
+                                }
+
+                                // Handle reasoning delta (DeepSeek R1/V3)
+                                if (delta.reasoning && onReasoning) {
+                                    onReasoning(delta.reasoning);
+                                }
                             }
 
-                            // Check finish reason
-                            if (data.choices?.[0]?.finish_reason) {
-                                // Request finished
-                            }
                         } catch (e) {
                             console.warn("Failed to parse SSE line:", line, e);
                         }
-                    } else {
-                        // Keep parsing if line might be wrapped JSON? 
-                        // Usually SSE lines are strictly data: {...}
-                        // Non-data lines are ignored (like keep-alives)
                     }
                 }
             }
@@ -89,7 +89,6 @@ export class StreamManager {
         } catch (error: any) {
             if (error.name === 'AbortError') {
                 console.log('Stream aborted');
-                // Optional: callback for abort
             } else {
                 console.error("Stream Error:", error);
                 onError(error);

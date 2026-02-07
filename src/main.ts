@@ -236,7 +236,8 @@ export default class OpenRouterProvider extends Plugin {
         requestBody: RequestBody,
         onToken: (token: string) => void,
         onComplete: (fullText: string) => void,
-        onError: (error: any) => void
+        onError: (error: any) => void,
+        onReasoning?: (reasoning: string) => void
     ): Promise<void> {
         const apiKey = this.settings.apiKey;
         if (!apiKey) {
@@ -245,7 +246,8 @@ export default class OpenRouterProvider extends Plugin {
         }
 
         this.statusBar.setConnecting();
-        // Check if reasoning model to show "Thinking..."
+
+        // Initial "Thinking" state if model name suggests it
         if (requestBody.model.includes("deepseek") || requestBody.model.includes("reasoner")) {
             this.statusBar.setThinking();
         }
@@ -265,6 +267,11 @@ export default class OpenRouterProvider extends Plugin {
             (fullText) => {
                 this.statusBar.setSuccess();
                 onComplete(fullText);
+            },
+            new AbortController(), // Default controller
+            (reasoning) => {
+                this.statusBar.setThinking(); // Ensure status says "Thinking..."
+                if (onReasoning) onReasoning(reasoning);
             }
         );
     }
