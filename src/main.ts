@@ -1,12 +1,14 @@
 /*
  * OPENROUTER PROVIDER PLUGIN
  * Shared API provider for AI plugins in Obsidian
- * Manages: API key, model selection, favorites, credits
+ * Manages: API key, model selection, favorites, credits, streaming
  */
 
 import { Plugin, requestUrl, Notice, App } from "obsidian";
 import { ModelSelectorModal } from "./modelSelector";
 import { OpenRouterSettingTab } from "./settingsTab";
+import { StreamManager } from "./streamManager";
+import { StatusBar } from "./statusBar";
 
 // ==================== TYPES ====================
 export interface OpenRouterSettings {
@@ -49,14 +51,20 @@ const DEFAULT_SETTINGS: OpenRouterSettings = {
 };
 
 // ==================== MAIN PLUGIN ====================
+
 export default class OpenRouterProvider extends Plugin {
     settings!: OpenRouterSettings;
+    statusBar!: StatusBar;
 
     async onload(): Promise<void> {
         await this.loadSettings();
 
         // Register as global provider
         window.openrouterProvider = this;
+
+        // Initialize Status Bar
+        const statusBarItem = this.addStatusBarItem();
+        this.statusBar = new StatusBar(statusBarItem);
 
         // Settings tab
         this.addSettingTab(new OpenRouterSettingTab(this.app, this));
@@ -76,6 +84,16 @@ export default class OpenRouterProvider extends Plugin {
 
     onunload(): void {
         delete (window as any).openrouterProvider;
+        if (this.statusBar) this.statusBar.reset();
+    }
+
+    // ==================== SETTINGS ====================
+    async loadSettings(): Promise<void> {
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    }
+
+    async saveSettings(): Promise<void> {
+        await this.saveData(this.settings);
     }
 
     // ==================== PUBLIC API ====================
@@ -105,8 +123,7 @@ export default class OpenRouterProvider extends Plugin {
 
     async addFavorite(modelId: string, contextLength: number | null = null): Promise<void> {
         const favorites = this.settings.favoriteModels;
-        const index = favorites.indexOf(modelId);
-        if (index === -1) {
+        if (!favorites.includes(modelId)) {
             favorites.push(modelId);
         }
         if (contextLength) {
@@ -160,8 +177,11 @@ export default class OpenRouterProvider extends Plugin {
     }
 
     async fetchWithRetry(requestBody: RequestBody, retries: number = 3, delay: number = 2000): Promise<any> {
+        this.statusBar.setConnecting();
+
         for (let i = 0; i < retries; i++) {
             try {
+                this.statusBar.setGenerating();
                 const response = await requestUrl({
                     url: this.settings.apiUrl,
                     method: "POST",
@@ -176,6 +196,7 @@ export default class OpenRouterProvider extends Plugin {
 
                 if (response.status === 429) {
                     new Notice(`⚠️ Rate limit! Waiting ${delay / 1000}s...`);
+                    this.statusBar.item.setText(` Rate limited (${delay / 1000}s)`);
                     await new Promise(r => setTimeout(r, delay));
                     delay *= 2;
                     continue;
@@ -196,22 +217,55 @@ export default class OpenRouterProvider extends Plugin {
                         (response.json as any).choices[0].message.content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
                 }
 
+                this.statusBar.setSuccess();
                 return response;
 
             } catch (error) {
-                if (i === retries - 1) throw error;
+                if (i === retries - 1) {
+                    this.statusBar.setError("API Failed");
+                    throw error;
+                }
                 await new Promise(r => setTimeout(r, delay));
                 delay *= 1.5;
             }
         }
     }
 
-    // ==================== SETTINGS ====================
-    async loadSettings(): Promise<void> {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-    }
+    // New Streaming Method
+    async streamRequest(
+        requestBody: RequestBody,
+        onToken: (token: string) => void,
+        onComplete: (fullText: string) => void,
+        onError: (error: any) => void
+    ): Promise<void> {
+        const apiKey = this.settings.apiKey;
+        if (!apiKey) {
+            new Notice("OpenRouter API Key missing!");
+            return;
+        }
 
-    async saveSettings(): Promise<void> {
-        await this.saveData(this.settings);
+        this.statusBar.setConnecting();
+        // Check if reasoning model to show "Thinking..."
+        if (requestBody.model.includes("deepseek") || requestBody.model.includes("reasoner")) {
+            this.statusBar.setThinking();
+        }
+
+        await StreamManager.streamRequest(
+            this.settings.apiUrl,
+            apiKey,
+            requestBody,
+            (token) => {
+                this.statusBar.updateProgress(1);
+                onToken(token);
+            },
+            (error) => {
+                this.statusBar.setError("Stream Error");
+                onError(error);
+            },
+            (fullText) => {
+                this.statusBar.setSuccess();
+                onComplete(fullText);
+            }
+        );
     }
 }

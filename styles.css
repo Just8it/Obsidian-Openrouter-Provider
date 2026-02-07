@@ -536,4 +536,7 @@
 .or-text-center {
     text-align: center;
     padding: 12px;
-}
+}  
+/* Status Bar Spinner */  
+@keyframes or-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }  
+.status-bar-item-icon.or-spinning svg { animation: or-spin 1s linear infinite; } 
