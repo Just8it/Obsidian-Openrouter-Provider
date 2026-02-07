@@ -38,6 +38,35 @@ export class StreamManager {
 
             if (!response.body) throw new Error("No response body");
 
+            // Check if response is JSON (fallback for non-streaming providers)
+            const contentType = response.headers.get("content-type") || "";
+            if (contentType.includes("application/json")) {
+                const json = await response.json();
+                const choice = json.choices?.[0];
+
+                if (choice) {
+                    const content = choice.message?.content || "";
+                    const reasoning = choice.message?.reasoning || ""; // detailed-thinking field?
+
+                    // Emit reasoning if present
+                    if (reasoning && onReasoning) {
+                        onReasoning(reasoning);
+                    } else if (content.includes("<think>")) {
+                        // Attempt to extract think tag if in content
+                        const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
+                        if (thinkMatch && onReasoning) {
+                            onReasoning(thinkMatch[1]);
+                        }
+                    }
+
+                    if (content) {
+                        onToken(content); // Emit all at once
+                    }
+                    onComplete(content);
+                }
+                return;
+            }
+
             const reader = response.body.getReader();
             const decoder = new TextDecoder("utf-8");
             let fullText = "";
