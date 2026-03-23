@@ -23,31 +23,30 @@ export class OpenRouterSettingTab extends PluginSettingTab {
         containerEl.createEl('h2', { text: 'OpenRouter Provider' });
 
         // ===== API KEY =====
-        new Setting(containerEl)
-            .setName('API Key')
-            .setDesc('Your OpenRouter API key (shared across all AI plugins)')
-            .addText(t => t
-                .setPlaceholder('sk-or-...')
-                .setValue(this.plugin.settings.apiKey)
-                .onChange(async v => {
-                    this.plugin.settings.apiKey = v;
-                    await this.plugin.saveSettings();
-                }));
+        this.createSection(containerEl, 'API Key', 'key', (content) => {
+            new Setting(content)
+                .setName('API Key')
+                .setDesc('Your OpenRouter API key (shared across all AI plugins)')
+                .addText(t => t
+                    .setPlaceholder('sk-or-...')
+                    .setValue(this.plugin.settings.apiKey)
+                    .onChange(async v => {
+                        this.plugin.settings.apiKey = v;
+                        await this.plugin.saveSettings();
+                    }));
 
-        // Balance display
-        const balanceContainer = containerEl.createDiv({ cls: 'or-settings-balance' });
-        balanceContainer.setText("Checking balance...");
-        this.plugin.fetchCredits().then(c => {
-            balanceContainer.empty();
-            const icon = balanceContainer.createSpan({ cls: 'or-balance-icon' });
-            setIcon(icon, 'wallet');
-            balanceContainer.createSpan({ text: c ? `Balance: $${c}` : "Balance: Unknown" });
+            const balanceContainer = content.createDiv({ cls: 'or-settings-balance' });
+            balanceContainer.setText("Checking balance...");
+            this.plugin.fetchCredits().then(c => {
+                balanceContainer.empty();
+                const icon = balanceContainer.createSpan({ cls: 'or-balance-icon' });
+                setIcon(icon, 'wallet');
+                balanceContainer.createSpan({ text: c ? `Balance: $${c}` : "Balance: Unknown" });
+            });
         });
 
         // ===== CONNECTED PLUGINS =====
-        this.createSection(containerEl, 'Connected Plugins', 'plug', () => {
-            const content = containerEl.createDiv({ cls: 'or-settings-section-content' });
-
+        this.createSection(containerEl, 'Connected Plugins', 'plug', (content) => {
             const aiPlugins = [
                 { id: 'ai-ocr-formatter', name: 'AI OCR Formatter' },
                 { id: 'ai-flashcards', name: 'AI Flashcards' },
@@ -63,7 +62,6 @@ export class OpenRouterSettingTab extends PluginSettingTab {
                 hasAnyPlugin = true;
 
                 const row = content.createDiv({ cls: 'or-settings-plugin-row' });
-
                 const left = row.createDiv({ cls: 'or-settings-plugin-info' });
                 const statusIcon = left.createSpan({ cls: 'or-status-icon connected' });
                 setIcon(statusIcon, 'check-circle');
@@ -87,9 +85,7 @@ export class OpenRouterSettingTab extends PluginSettingTab {
         });
 
         // ===== FAVORITE MODELS =====
-        this.createSection(containerEl, 'Favorite Models', 'star', () => {
-            const content = containerEl.createDiv({ cls: 'or-settings-section-content' });
-
+        this.createSection(containerEl, 'Favorite Models', 'star', (content) => {
             const currentFavorites = this.plugin.getFavorites();
             if (currentFavorites.length === 0) {
                 content.createDiv({
@@ -110,7 +106,6 @@ export class OpenRouterSettingTab extends PluginSettingTab {
                 });
             }
 
-            // Manage button
             const btnContainer = content.createDiv({ cls: 'or-settings-btn-container' });
             const manageBtn = btnContainer.createEl('button', {
                 text: 'Manage Models',
@@ -118,14 +113,14 @@ export class OpenRouterSettingTab extends PluginSettingTab {
             });
             manageBtn.addEventListener('click', () => {
                 this.plugin.openModelSelector('settings', () => {
-                    this.display(); // Refresh
+                    this.display();
                 });
             });
         });
 
         // ===== DEBUG (Collapsible) =====
-        this.createCollapsibleSection(containerEl, 'Debug Info', 'bug', false, () => {
-            const content = containerEl.createDiv({ cls: 'or-settings-debug' });
+        this.createCollapsibleSection(containerEl, 'Debug Info', 'bug', false, (content) => {
+            content.addClass('or-settings-debug');
 
             const pluginModels = this.plugin.settings.pluginModels || {};
 
@@ -143,39 +138,30 @@ export class OpenRouterSettingTab extends PluginSettingTab {
         });
     }
 
-    private createSection(container: HTMLElement, title: string, icon: string, buildContent: () => void): void {
-        const section = container.createDiv({ cls: 'or-settings-section' });
-        const header = section.createDiv({ cls: 'or-settings-section-header' });
-        const iconEl = header.createSpan({ cls: 'or-settings-section-icon' });
+    private createSection(container: HTMLElement, title: string, icon: string, buildContent: (contentEl: HTMLElement) => void): void {
+        const section = container.createDiv({ cls: 'ai-settings-section' });
+        const header = section.createDiv({ cls: 'ai-settings-section-header' });
+        const iconEl = header.createSpan({ cls: 'ai-settings-section-icon' });
         setIcon(iconEl, icon);
         header.createSpan({ text: title });
-        buildContent();
+        const content = section.createDiv({ cls: 'ai-settings-section-content' });
+        buildContent(content);
     }
 
-    private createCollapsibleSection(container: HTMLElement, title: string, icon: string, openByDefault: boolean, buildContent: () => void): void {
-        const section = container.createDiv({ cls: 'or-settings-section or-collapsible' });
+    private createCollapsibleSection(container: HTMLElement, title: string, icon: string, openByDefault: boolean, buildContent: (contentEl: HTMLElement) => void): void {
+        const section = container.createDiv({ cls: 'ai-settings-section ai-collapsible' });
         if (openByDefault) section.addClass('open');
 
-        const header = section.createDiv({ cls: 'or-settings-section-header clickable' });
-        const iconEl = header.createSpan({ cls: 'or-settings-section-icon' });
+        const header = section.createDiv({ cls: 'ai-settings-section-header clickable' });
+        const iconEl = header.createSpan({ cls: 'ai-settings-section-icon' });
         setIcon(iconEl, icon);
         header.createSpan({ text: title });
-        const chevron = header.createSpan({ cls: 'or-chevron' });
+        const chevron = header.createSpan({ cls: 'ai-chevron' });
         setIcon(chevron, 'chevron-down');
 
-        const contentWrapper = section.createDiv({ cls: 'or-collapsible-content' });
-
-        header.addEventListener('click', () => {
-            section.toggleClass('open', !section.hasClass('open'));
-        });
-
-        // Build content inside wrapper
-        const originalParent = container;
-        buildContent();
-        // Move the created content div into wrapper
-        const lastChild = container.lastElementChild;
-        if (lastChild && lastChild !== section) {
-            contentWrapper.appendChild(lastChild);
-        }
+        const contentWrapper = section.createDiv({ cls: 'ai-collapsible-content' });
+        header.addEventListener('click', () => section.toggleClass('open', !section.hasClass('open')));
+        const content = contentWrapper.createDiv({ cls: 'ai-settings-section-content' });
+        buildContent(content);
     }
 }

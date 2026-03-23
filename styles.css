@@ -389,11 +389,12 @@
     opacity: 0.7;
 }
 
-.or-settings-section {
+/* ---- Shared Settings Design System ---- */
+.ai-settings-section {
     margin-bottom: 20px;
 }
 
-.or-settings-section-header {
+.ai-settings-section-header {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -403,37 +404,38 @@
     color: var(--text-normal);
 }
 
-.or-settings-section-header.clickable {
+.ai-settings-section-header.clickable {
     cursor: pointer;
     user-select: none;
 }
 
-.or-settings-section-header.clickable:hover {
+.ai-settings-section-header.clickable:hover {
     color: var(--text-accent);
 }
 
-.or-settings-section-icon {
+.ai-settings-section-icon {
     opacity: 0.7;
 }
 
-.or-chevron {
+.ai-chevron {
     margin-left: auto;
     transition: transform 0.2s ease;
+    opacity: 0.5;
 }
 
-.or-collapsible.open .or-chevron {
+.ai-collapsible.open .ai-chevron {
     transform: rotate(180deg);
 }
 
-.or-collapsible-content {
+.ai-collapsible-content {
     display: none;
 }
 
-.or-collapsible.open .or-collapsible-content {
+.ai-collapsible.open .ai-collapsible-content {
     display: block;
 }
 
-.or-settings-section-content {
+.ai-settings-section-content {
     background: var(--background-secondary);
     border-radius: 6px;
     padding: 12px;
